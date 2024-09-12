@@ -1,0 +1,83 @@
+import os
+import hashlib
+import shutil
+import argparse
+import logging
+import time
+from datetime import datetime
+
+
+def calculate_md5(file_path):
+    hasher = hashlib.md5()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b''):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+def log_file_setup(log_file):
+
+    logger = logging.getLogger("FolderSync")
+    logger.setLevel(logging.INFO)
+    
+    file_handler = logging.FileHandler(log_file)
+    console_handler = logging.StreamHandler()
+
+    formatter = logging.Formatter('%(asctime)s || %(message)s', datefmt = "%y/%b/%Y %H:%M:%S")
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+def sync_folders(source, replica, logfile):
+
+    source_files = os.listdir(source)
+    replica_files = os.listdir(replica)
+
+    for file in source_files:
+        source_file_path = os.path.join(source,file)
+        replica_file_path = os.path.join(replica,file)
+        
+        if file not in replica_files:
+            logfile.info(f"File created in replica: {file}")
+            shutil.copy2(source_file_path,replica_file_path)
+
+        elif calculate_md5(source_file_path) != calculate_md5(replica_file_path):
+            logfile.info(f"File modified in replica: {file}")
+            shutil.copy2(source_file_path,replica_file_path)
+    
+    for file in replica_files:
+        source_file_path = os.path.join(source,file)
+        replica_file_path = os.path.join(replica,file)
+
+        if file not in source_files:
+            os.remove(replica_file_path)
+            logfile.info(f"File deleted from replica: {file}")
+
+
+def sync_function():
+
+    parser = argparse.ArgumentParser(description="Synchronize source folder with replica folder")
+    parser.add_argument("--source", help = "Path to the source folder")
+    parser.add_argument("--replica", help = "Path to the replica folder")
+    parser.add_argument("--sync_interval", help = "Synchronization interval")
+    parser.add_argument("--log_file", help = "Path to the log file")
+
+    args = vars(parser.parse_args())
+
+    logger = log_file_setup(args['log_file'])
+    
+    while True:
+        print(f"\nStarting synchronization at {datetime.now():%y/%b/%Y %H:%M:%S}.")
+        sync_folders(args['source'],args['replica'],logger)
+        logger.info("Synchronization complete.")
+
+
+        time.sleep(int(args["sync_interval"]))
+
+if __name__ == "__main__":
+
+    sync_function()
+
